@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       templateUrl:
-        description: Template Repository URL (current is https://github.com/microsoft/AL-Go-PTE@main)
+        description: Template Repository URL (current is https://github.com/liderit-estandard/plantilla-al-go-pte@main)
         required: false
         default: ''
       downloadLatest:
@@ -22,7 +22,7 @@ on:
   workflow_call:
     inputs:
       templateUrl:
-        description: Template Repository URL (current is https://github.com/microsoft/AL-Go-PTE@main)
+        description: Template Repository URL (current is https://github.com/liderit-estandard/plantilla-al-go-pte@main)
         type: string
         required: false
         default: ''
@@ -40,7 +40,7 @@ on:
         required: false
         default: ''
   schedule:
-    - cron: '0 0 * * 1'
+    - cron: '0 0 9 * *'
 
 permissions:
   actions: read
