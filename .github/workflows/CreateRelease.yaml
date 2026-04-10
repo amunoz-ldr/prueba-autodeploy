@@ -331,7 +331,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Update cron schedule in LDR workflow
+      - name: Update cron schedule and commit
         run: |
           horaPublicacion=$(jq -r '.HoraPublicacion' .github/LDR-Settings.json)
           if [ -z "$horaPublicacion" ] || [ "$horaPublicacion" = "null" ]; then
@@ -344,15 +344,15 @@ jobs:
           dayOfWeek=$(date +%w)
           newCron="$minute $hour * * $dayOfWeek"
           echo "Nueva expresión cron: $newCron"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin ${{ github.ref_name }}
+
           sed -i "s|- cron:.*|- cron: \"$newCron\" # Programado automáticamente por el release workflow|" .github/workflows/LDR_PublicarEnProduccionRetardado.yaml
           echo "Línea cron actualizada:"
           grep 'cron:' .github/workflows/LDR_PublicarEnProduccionRetardado.yaml
 
-      - name: Commit and push updated schedule
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git pull --rebase origin ${{ github.ref_name }}
           git add .github/workflows/LDR_PublicarEnProduccionRetardado.yaml
           if git diff --cached --quiet; then
             echo "Sin cambios en el cron, nada que commitear"
