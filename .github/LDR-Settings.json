@@ -1,4 +1,5 @@
 {
   "PublicarOnRelease": true,
-  "NombreEntorno": "PRODUCTION"  
+  "NombreEntorno": "PRODUCTION",
+  "HoraPublicacion": "00:00"
 }
