@@ -1,5 +1,7 @@
-# Plantilla personalizada basada en AL-Go Per Tenant Extension Template
+🕐 Hora de inicio vs. hora programada
+Valor
+Hora programada (cron)	"00 17 9 4 *" → 17:00 UTC del 9 de abril de 2026
 
-A la plantilla del estandard incluyo estructura básica, instrucciones para copilot basadas en [AL-Guidelines](https://alguidelines.dev/docs/agentic-coding/), programación de acciones (test next major y update al-go system files) y telemetría de las mismas.
-
+Hora de inicio real del job	17:59:46 UTC del 9 de abril de 2026
+Diferencia	~59 minutos y 46 segundos de retraso
 
