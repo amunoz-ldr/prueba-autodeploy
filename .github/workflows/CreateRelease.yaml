@@ -334,13 +334,12 @@ jobs:
         with:
           shell: pwsh
           gitHubSecrets: ${{ toJson(secrets) }}
-          getSecrets: "TokenForPush,ghTokenWorkflow"
-          useGhTokenWorkflowForPush: "${{ github.event.inputs.useGhTokenWorkflow }}"
+          getSecrets: "ghTokenWorkflow"
 
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          token: ${{ fromJson(steps.ReadSecrets.outputs.Secrets).TokenForPush }}
+          token: ${{ fromJson(steps.ReadSecrets.outputs.Secrets).ghTokenWorkflow }}
 
       - name: Update cron schedule and commit
         run: |
