@@ -1,4 +1,4 @@
 {
   "PublicarOnRelease": true,
-  "NombreEntorno": "PRODUCTION"  
+  "NombreEntorno": "PROD*"  
 }
