@@ -7,7 +7,7 @@ on:
 
 permissions:
     actions: write
-    contents: read
+    contents: write
 
 defaults:
     run:
@@ -42,3 +42,77 @@ jobs:
                     https://api.github.com/repos/${{ github.repository }}/actions/workflows/PublishToEnvironment.yaml/dispatches \
                     -d "{\"ref\":\"${{ github.ref_name }}\",\"inputs\":{\"environmentName\":\"${{ steps.settings.outputs.nombreEntorno }}\",\"appVersion\":\"current\",\"createEnvIfNotExists\":\"false\"}}"
                   echo "Publish To Environment workflow triggered for environment: ${{ steps.settings.outputs.nombreEntorno }}"
+
+    RemoveCronAfterExecution:
+        name: Remove cron after scheduled execution
+        needs: [TriggerPublish]
+        if: github.event_name == 'schedule'
+        runs-on: [ubuntu-latest]
+        defaults:
+            run:
+                shell: bash
+        steps:
+            - name: Generate GitHub App token
+              id: GenerateJWT
+              shell: pwsh
+              env:
+                  GH_TOKEN_WORKFLOW: ${{ secrets.GHTOKENWORKFLOW }}
+              run: |
+                  $errorActionPreference = "Stop"; $ProgressPreference = "SilentlyContinue"; Set-StrictMode -Version 2.0
+                  if (-not $env:GH_TOKEN_WORKFLOW) {
+                    Write-Host "::error::Secret GHTOKENWORKFLOW is not configured"
+                    exit 1
+                  }
+                  $tokenData = $env:GH_TOKEN_WORKFLOW | ConvertFrom-Json
+                  $clientId = $tokenData.GitHubAppClientId
+                  $privateKey = $tokenData.PrivateKey -replace '\\n', "`n"
+                  if ($privateKey -notmatch "`n") {
+                    if ($privateKey -match '^(-----BEGIN [^-]+-----)(.+?)(-----END [^-]+-----)$') {
+                      $header = $Matches[1]; $body = $Matches[2]; $footer = $Matches[3]
+                      $bodyLines = for ($i = 0; $i -lt $body.Length; $i += 64) { $body.Substring($i, [Math]::Min(64, $body.Length - $i)) }
+                      $privateKey = "$header`n$($bodyLines -join "`n")`n$footer"
+                    }
+                  }
+                  $tempKeyFile = Join-Path $env:RUNNER_TEMP "gh-app-key-$([Guid]::NewGuid()).pem"
+                  [System.IO.File]::WriteAllText($tempKeyFile, $privateKey, [System.Text.UTF8Encoding]::new($false))
+                  try {
+                    $now = [Math]::Floor([decimal](Get-Date -UFormat %s))
+                    $headerEncoded  = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes('{"alg":"RS256","typ":"JWT"}')).TrimEnd('=').Replace('+','-').Replace('/','_')
+                    $payloadEncoded = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("{`"iat`":$($now-60),`"exp`":$($now+600),`"iss`":`"$clientId`"}")).TrimEnd('=').Replace('+','-').Replace('/','_')
+                    $dataFile = Join-Path $env:RUNNER_TEMP "data-$([Guid]::NewGuid()).txt"
+                    $sigFile  = Join-Path $env:RUNNER_TEMP "sig-$([Guid]::NewGuid()).bin"
+                    "$headerEncoded.$payloadEncoded" | Out-File $dataFile -Encoding ASCII -NoNewline
+                    & openssl dgst -sha256 -sign $tempKeyFile -out $sigFile $dataFile 2>&1 | Out-Null
+                    $sigEncoded = [Convert]::ToBase64String([System.IO.File]::ReadAllBytes($sigFile)).TrimEnd('=').Replace('+','-').Replace('/','_')
+                    $jwt = "$headerEncoded.$payloadEncoded.$sigEncoded"
+                    Remove-Item $dataFile, $sigFile -Force -ErrorAction SilentlyContinue
+                    $headers = @{ "Accept"="application/vnd.github+json"; "Authorization"="Bearer $jwt"; "X-GitHub-Api-Version"="2022-11-28" }
+                    $owner = "${{ github.repository_owner }}"
+                    try { $installation = Invoke-RestMethod -Uri "https://api.github.com/orgs/$owner/installation" -Headers $headers -Method Get }
+                    catch { $installation = Invoke-RestMethod -Uri "https://api.github.com/users/$owner/installation" -Headers $headers -Method Get }
+                    $token = (Invoke-RestMethod -Uri $installation.access_tokens_url -Headers $headers -Method Post).token
+                    Add-Content -Encoding UTF8 -Path $env:GITHUB_OUTPUT -Value "token=$token"
+                    Write-Host "[OK] GitHub App token generated"
+                  }
+                  finally { Remove-Item $tempKeyFile -Force -ErrorAction SilentlyContinue }
+
+            - name: Checkout
+              uses: actions/checkout@v4
+              with:
+                  token: ${{ steps.GenerateJWT.outputs.token }}
+
+            - name: Remove cron and push
+              run: |
+                  sed -i '/- cron:/d' .github/workflows/LDR_PublicarEnProduccionRetardado.yaml
+                  echo "Cron eliminado."
+
+                  git config user.name "github-actions[bot]"
+                  git config user.email "github-actions[bot]@users.noreply.github.com"
+                  git pull --rebase origin ${{ github.ref_name }}
+                  git add .github/workflows/LDR_PublicarEnProduccionRetardado.yaml
+                  if git diff --cached --quiet; then
+                    echo "Sin cambios, nada que commitear"
+                  else
+                    git commit -m "chore: eliminar cron de LDR_PublicarEnProduccionRetardado tras ejecución programada"
+                    git push
+                  fi
