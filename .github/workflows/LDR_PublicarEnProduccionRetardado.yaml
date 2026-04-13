@@ -2,7 +2,7 @@ name: "LDR: Publicar en produccion (retardado)"
 
 on:
     schedule:
-        - cron: "00 13 13 4 *" # Programado automáticamente por el release workflow
+        - cron: '00 14 13 4 *' # Programado automáticamente por el release workflow
     workflow_dispatch: # Allow manual triggering
 
 permissions:
