@@ -103,7 +103,7 @@ jobs:
 
             - name: Remove cron and push
               run: |
-                  sed -i '/- cron:/d' .github/workflows/LDR_PublicarEnProduccionRetardado.yaml
+                  sed -i '/- cron: "45 23 13 4 *" # Programado automáticamente por el release workflow
                   echo "Cron eliminado."
 
                   git config user.name "github-actions[bot]"
