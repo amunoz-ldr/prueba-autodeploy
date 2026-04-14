@@ -17,6 +17,33 @@ jobs:
     TriggerPublish:
         runs-on: [ubuntu-latest]
         steps:
+            - name: Check scheduled execution delay
+              if: github.event_name == 'schedule'
+              run: |
+                  CRON="${{ github.event.schedule }}"
+                  CRON_MIN=$(echo "$CRON"  | awk '{print $1}')
+                  CRON_HOUR=$(echo "$CRON" | awk '{print $2}')
+                  CRON_DAY=$(echo "$CRON"  | awk '{print $3}')
+                  CRON_MONTH=$(echo "$CRON" | awk '{print $4}')
+                  CRON_YEAR=$(date -u +%Y)
+
+                  SCHEDULED_TS=$(date -u -d "${CRON_YEAR}-${CRON_MONTH}-${CRON_DAY} ${CRON_HOUR}:${CRON_MIN}:00" +%s)
+                  CURRENT_TS=$(date -u +%s)
+                  DIFF_SECS=$(( CURRENT_TS - SCHEDULED_TS ))
+                  DIFF_HOURS=$(( DIFF_SECS / 3600 ))
+                  DIFF_MINS=$(( (DIFF_SECS % 3600) / 60 ))
+
+                  echo "Hora programada (UTC): ${CRON_YEAR}-${CRON_MONTH}-${CRON_DAY} ${CRON_HOUR}:${CRON_MIN}"
+                  echo "Hora actual (UTC): $(date -u '+%Y-%m-%d %H:%M')"
+                  echo "Retraso: ${DIFF_HOURS}h ${DIFF_MINS}m"
+
+                  if [ "$DIFF_SECS" -gt 10800 ]; then
+                    echo "::error::Ejecución cancelada: el workflow se ha iniciado ${DIFF_HOURS}h ${DIFF_MINS}m después de la hora programada, superando el límite de 3 horas."
+                    exit 1
+                  fi
+
+                  echo "Retraso dentro del límite permitido (3 horas). Continuando ejecución."
+
             - name: Checkout
               uses: actions/checkout@v4
 
@@ -46,7 +73,7 @@ jobs:
     RemoveCronAfterExecution:
         name: Remove cron after scheduled execution
         needs: [TriggerPublish]
-        if: github.event_name == 'schedule'
+        # if: github.event_name == 'schedule'
         runs-on: [ubuntu-latest]
         defaults:
             run:
@@ -108,8 +135,8 @@ jobs:
 
                   git config user.name "github-actions[bot]"
                   git config user.email "github-actions[bot]@users.noreply.github.com"
-                  git pull --rebase origin ${{ github.ref_name }}
                   git add .github/workflows/LDR_PublicarEnProduccionRetardado.yaml
+                  git pull --rebase origin ${{ github.ref_name }}
                   if git diff --cached --quiet; then
                     echo "Sin cambios, nada que commitear"
                   else
