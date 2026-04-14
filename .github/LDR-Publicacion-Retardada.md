@@ -14,11 +14,16 @@ Este mecanismo permite programar automáticamente la publicación en producción
 ```
 CreateRelease.yaml
   └── Job: CustomJob-UpdatePublishSchedule
+        └── Invoca LDR_ProgramarPublicacion.yaml (workflow_call)
+
+LDR_ProgramarPublicacion.yaml
+  └── Job: UpdatePublishSchedule
+        ├── Comprueba PublicarOnRelease en LDR-Settings.json
         ├── Lee HoraPublicacion de LDR-Settings.json
         ├── Calcula cron con la fecha actual y la hora configurada
         └── Escribe el cron en LDR_PublicarEnProduccionRetardado.yaml y hace commit
 
-LDR_PublicarEnProduccionRetardado.yaml  (activado por el cron escritoo)
+LDR_PublicarEnProduccionRetardado.yaml  (activado por el cron escrito)
   ├── Job: TriggerPublish
   │     ├── Valida que el retraso de ejecución no supere 3 horas
   │     ├── Lee NombreEntorno de LDR-Settings.json
@@ -35,7 +40,8 @@ LDR_PublicarEnProduccionRetardado.yaml  (activado por el cron escritoo)
 | Archivo | Propósito |
 |---|---|
 | `.github/LDR-Settings.json` | Configuración del mecanismo (ver sección siguiente) |
-| `.github/workflows/CreateRelease.yaml` | Contiene el job `CustomJob-UpdatePublishSchedule` que programa el cron |
+| `.github/workflows/CreateRelease.yaml` | Contiene el job `CustomJob-UpdatePublishSchedule` que invoca `LDR_ProgramarPublicacion.yaml` |
+| `.github/workflows/LDR_ProgramarPublicacion.yaml` | Contiene toda la lógica de programación del cron; se puede invocar también manualmente |
 | `.github/workflows/LDR_PublicarEnProduccionRetardado.yaml` | Workflow que ejecuta el deploy y se auto-limpia |
 
 ---
@@ -65,7 +71,26 @@ LDR_PublicarEnProduccionRetardado.yaml  (activado por el cron escritoo)
 
 Este job se ejecuta en paralelo con `UpdateVersionNumber` y `CreateReleaseBranch`, después de que `CreateRelease` y `UploadArtifacts` hayan finalizado con éxito.
 
-### Pasos
+Actúa como punto de entrada delegando toda la lógica al workflow reutilizable `LDR_ProgramarPublicacion.yaml` mediante `workflow_call`:
+
+```yaml
+uses: ./.github/workflows/LDR_ProgramarPublicacion.yaml
+with:
+  releaseVersion: ${{ needs.CreateRelease.outputs.releaseVersion }}
+secrets: inherit
+```
+
+Gracias a `secrets: inherit`, el secreto `GHTOKENWORKFLOW` se transmite automáticamente al workflow llamado.
+
+---
+
+## Workflow `LDR_ProgramarPublicacion.yaml`
+
+Este workflow contiene toda la lógica de programación del cron. Se puede invocar de dos formas:
+- **Automáticamente** desde `CreateRelease.yaml` mediante `workflow_call`.
+- **Manualmente** desde la pestaña Actions de GitHub mediante `workflow_dispatch`, pasando opcionalmente el input `releaseVersion` (se usa solo en el mensaje del commit).
+
+### Job `UpdatePublishSchedule`
 
 #### 1. Generate GitHub App token
 Genera un token de acceso de corta duración a partir del secreto `GHTOKENWORKFLOW` (que debe contener `GitHubAppClientId` y `PrivateKey` en formato JSON). Este token con permisos de escritura en el repositorio es necesario para que el commit posterior desencadene otros workflows (un `GITHUB_TOKEN` estándar no lo hace).
@@ -145,7 +170,10 @@ Para forzar una publicación manual fuera del ciclo de release, use directamente
 CreateRelease workflow
       │
       ▼
-CustomJob-UpdatePublishSchedule
+CustomJob-UpdatePublishSchedule  (workflow_call)
+      │
+      ▼
+LDR_ProgramarPublicacion.yaml
       │  escribe cron (ej: "45 23 14 4 *")
       ▼
 LDR_PublicarEnProduccionRetardado.yaml  ◄── (commit activa el cron en GitHub)
