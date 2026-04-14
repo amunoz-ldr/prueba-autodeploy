@@ -137,7 +137,7 @@ jobs:
                   git config user.name "github-actions[bot]"
                   git config user.email "github-actions[bot]@users.noreply.github.com"
                   git pull --rebase origin ${{ github.ref_name }}
-                  sed -i '/^\s*- cron:/d; /^\s*schedule:/d' .github/workflows/LDR_PublicarEnProduccionRetardado.yaml
+                  sed -i '/^\s*- cron: '45 23 14 4 *' # Programado automáticamente por el release workflow
                   echo "Cron eliminado."
 
                   git add .github/workflows/LDR_PublicarEnProduccionRetardado.yaml
