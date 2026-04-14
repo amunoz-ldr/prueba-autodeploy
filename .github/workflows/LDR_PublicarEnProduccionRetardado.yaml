@@ -2,7 +2,7 @@ name: "LDR: Publicar en produccion (retardado)"
 
 on:
     schedule:
-        - cron: '45 23 14 4 *'
+        - cron: "45 23 14 4 *"
     workflow_dispatch: # Allow manual triggering
 
 permissions:
@@ -17,15 +17,23 @@ jobs:
     TriggerPublish:
         runs-on: [ubuntu-latest]
         steps:
-            - name: Check scheduled execution delay
-              # if: github.event_name == 'schedule'
-              run: |
-                  CRON="${{ github.event.schedule }}"
+            - name: Checkout
+              uses: actions/checkout@v4
 
-                  if [ -z "$CRON" ]; then
-                    echo "::error::No hay cron programado: el workflow ya fue ejecutado y el cron fue eliminado. Ejecución detenida."
+            - name: Block manual execution without scheduled cron
+              if: github.event_name != 'schedule'
+              run: |
+                  if grep -qE '^\s+- cron:' .github/workflows/LDR_PublicarEnProduccionRetardado.yaml; then
+                    echo "Hay cron activo en el workflow. Ejecución manual permitida."
+                  else
+                    echo "::error::Este workflow solo debe ejecutarse mediante su cron programado. No hay cron activo actualmente (fue eliminado tras la última ejecución o aún no se ha configurado un release)."
                     exit 1
                   fi
+
+            - name: Check scheduled execution delay
+              if: github.event_name == 'schedule'
+              run: |
+                  CRON="${{ github.event.schedule }}"
 
                   CRON_MIN=$(echo "$CRON"  | awk '{print $1}')
                   CRON_HOUR=$(echo "$CRON" | awk '{print $2}')
@@ -49,9 +57,6 @@ jobs:
                   fi
 
                   echo "Retraso dentro del límite permitido (3 horas). Continuando ejecución."
-
-            - name: Checkout
-              uses: actions/checkout@v4
 
             - name: Read NombreEntorno from LDR-Settings.json
               id: settings
