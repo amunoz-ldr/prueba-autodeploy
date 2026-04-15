@@ -1,187 +1,190 @@
 name: "LDR: Publicar en producción (retardado)"
 
 on:
-    workflow_dispatch: # Allow manual triggering
+  workflow_dispatch: # Allow manual triggering
 
 permissions:
-    actions: write
-    contents: write
+  actions: write
+  contents: write
 
 defaults:
-    run:
-        shell: bash
+  run:
+    shell: bash
 
 jobs:
-    TriggerPublish:
-        runs-on: [ubuntu-latest]
-        steps:
-            - name: Checkout
-              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+  TriggerPublish:
+    runs-on: [ubuntu-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-            - name: Block manual execution without scheduled cron
-              if: github.event_name != 'schedule'
-              run: |
-                  if grep -qE '^\s+- cron:' .github/workflows/LDR_PublicarEnProduccionRetardado.yaml; then
-                    echo "Hay cron activo en el workflow. Ejecución manual permitida."
-                  else
-                    echo "::error::Este workflow solo debe ejecutarse mediante su cron programado. No hay cron activo actualmente (fue eliminado tras la última ejecución o aún no se ha configurado un release)."
-                    exit 1
-                  fi
+      - name: Block manual execution without scheduled cron
+        if: github.event_name != 'schedule'
+        run: |
+          if grep -qE '^\s+- cron:' .github/workflows/LDR_PublicarEnProduccionRetardado.yaml; then
+            echo "Hay cron activo en el workflow. Ejecución manual permitida."
+          else
+            echo "::error::Este workflow solo debe ejecutarse mediante su cron programado. No hay cron activo actualmente (fue eliminado tras la última ejecución o aún no se ha configurado un release)."
+            exit 1
+          fi
 
-            - name: Check scheduled execution delay
-              if: github.event_name == 'schedule'
-              run: |
-                  CRON="${{ github.event.schedule }}"
+      - name: Check scheduled execution delay
+        if: github.event_name == 'schedule'
+        run: |
+          CRON="${{ github.event.schedule }}"
 
-                  CRON_MIN=$(echo "$CRON"  | awk '{print $1}')
-                  CRON_HOUR=$(echo "$CRON" | awk '{print $2}')
-                  CRON_DAY=$(echo "$CRON"  | awk '{print $3}')
-                  CRON_MONTH=$(echo "$CRON" | awk '{print $4}')
-                  CRON_YEAR=$(date -u +%Y)
+          CRON_MIN=$(echo "$CRON"  | awk '{print $1}')
+          CRON_HOUR=$(echo "$CRON" | awk '{print $2}')
+          CRON_DAY=$(echo "$CRON"  | awk '{print $3}')
+          CRON_MONTH=$(echo "$CRON" | awk '{print $4}')
+          CRON_YEAR=$(date -u +%Y)
 
-                  SCHEDULED_TS=$(date -u -d "${CRON_YEAR}-${CRON_MONTH}-${CRON_DAY} ${CRON_HOUR}:${CRON_MIN}:00" +%s)
-                  CURRENT_TS=$(date -u +%s)
-                  DIFF_SECS=$(( CURRENT_TS - SCHEDULED_TS ))
-                  DIFF_HOURS=$(( DIFF_SECS / 3600 ))
-                  DIFF_MINS=$(( (DIFF_SECS % 3600) / 60 ))
+          SCHEDULED_TS=$(date -u -d "${CRON_YEAR}-${CRON_MONTH}-${CRON_DAY} ${CRON_HOUR}:${CRON_MIN}:00" +%s)
+          CURRENT_TS=$(date -u +%s)
+          DIFF_SECS=$(( CURRENT_TS - SCHEDULED_TS ))
+          DIFF_HOURS=$(( DIFF_SECS / 3600 ))
+          DIFF_MINS=$(( (DIFF_SECS % 3600) / 60 ))
 
-                  echo "Hora programada (UTC): ${CRON_YEAR}-${CRON_MONTH}-${CRON_DAY} ${CRON_HOUR}:${CRON_MIN}"
-                  echo "Hora actual (UTC): $(date -u '+%Y-%m-%d %H:%M')"
-                  echo "Retraso: ${DIFF_HOURS}h ${DIFF_MINS}m"
+          echo "Hora programada (UTC): ${CRON_YEAR}-${CRON_MONTH}-${CRON_DAY} ${CRON_HOUR}:${CRON_MIN}"
+          echo "Hora actual (UTC): $(date -u '+%Y-%m-%d %H:%M')"
+          echo "Retraso: ${DIFF_HOURS}h ${DIFF_MINS}m"
 
-                  if [ "$DIFF_SECS" -gt 10800 ]; then
-                    echo "::error::Ejecución cancelada: el workflow se ha iniciado ${DIFF_HOURS}h ${DIFF_MINS}m después de la hora programada, superando el límite de 3 horas."
-                    exit 1
-                  fi
+          if [ "$DIFF_SECS" -gt 10800 ]; then
+            echo "::error::Ejecución cancelada: el workflow se ha iniciado ${DIFF_HOURS}h ${DIFF_MINS}m después de la hora programada, superando el límite de 3 horas."
+            exit 1
+          fi
 
-                  echo "Retraso dentro del límite permitido (3 horas). Continuando ejecución."
+          echo "Retraso dentro del límite permitido (3 horas). Continuando ejecución."
 
-            - name: Read NombreEntorno from LDR-Settings.json
-              id: settings
-              run: |
-                  nombreEntorno=$(jq -r '.NombreEntorno' .github/LDR-Settings.json)
-                  if [ -z "$nombreEntorno" ]; then
-                    echo "ERROR: NombreEntorno is empty in LDR-Settings.json"
-                    exit 1
-                  fi
-                  echo "nombreEntorno=$nombreEntorno" >> $GITHUB_OUTPUT
-                  echo "NombreEntorno leído: $nombreEntorno"
+      - name: Read NombreEntorno from LDR-Settings.json
+        id: settings
+        run: |
+          nombreEntorno=$(jq -r '.NombreEntorno' .github/LDR-Settings.json)
+          if [ -z "$nombreEntorno" ]; then
+            echo "ERROR: NombreEntorno is empty in LDR-Settings.json"
+            exit 1
+          fi
+          echo "nombreEntorno=$nombreEntorno" >> $GITHUB_OUTPUT
+          echo "NombreEntorno leído: $nombreEntorno"
 
-            - name: Trigger Publish To Environment workflow
-              env:
-                  GITHUB_TOKEN: ${{ github.token }}
-              run: |
-                  curl -s -X POST \
-                    -H "Accept: application/vnd.github+json" \
-                    -H "Authorization: Bearer $GITHUB_TOKEN" \
-                    -H "X-GitHub-Api-Version: 2022-11-28" \
-                    https://api.github.com/repos/${{ github.repository }}/actions/workflows/PublishToEnvironment.yaml/dispatches \
-                    -d "{\"ref\":\"${{ github.ref_name }}\",\"inputs\":{\"environmentName\":\"${{ steps.settings.outputs.nombreEntorno }}\",\"appVersion\":\"current\",\"createEnvIfNotExists\":\"false\"}}"
-                  echo "Publish To Environment workflow triggered for environment: ${{ steps.settings.outputs.nombreEntorno }}"
+      - name: Trigger Publish To Environment workflow
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          curl -s -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${{ github.repository }}/actions/workflows/PublishToEnvironment.yaml/dispatches \
+            -d "{\"ref\":\"${{ github.ref_name }}\",\"inputs\":{\"environmentName\":\"${{ steps.settings.outputs.nombreEntorno }}\",\"appVersion\":\"current\",\"createEnvIfNotExists\":\"false\"}}"
+          echo "Publish To Environment workflow triggered for environment: ${{ steps.settings.outputs.nombreEntorno }}"
 
-    RemoveCronAfterExecution:
-        name: Remove cron after scheduled execution
-        needs: [TriggerPublish]
-        # if: github.event_name == 'schedule'
-        runs-on: [ubuntu-latest]
-        defaults:
-            run:
-                shell: bash
-        steps:
-            - name: Generate GitHub App token
-              id: GenerateJWT
-              shell: pwsh
-              env:
-                  GH_TOKEN_WORKFLOW: ${{ secrets.GHTOKENWORKFLOW }}
-              run: |
-                  $errorActionPreference = "Stop"; $ProgressPreference = "SilentlyContinue"; Set-StrictMode -Version 2.0
-                  if (-not $env:GH_TOKEN_WORKFLOW) {
-                    Write-Host "::error::Secret GHTOKENWORKFLOW is not configured"
-                    exit 1
-                  }
-                  $tokenData = $env:GH_TOKEN_WORKFLOW | ConvertFrom-Json
-                  $clientId = $tokenData.GitHubAppClientId
-                  $privateKey = $tokenData.PrivateKey -replace '\\n', "`n"
-                  if ($privateKey -notmatch "`n") {
-                    if ($privateKey -match '^(-----BEGIN [^-]+-----)(.+?)(-----END [^-]+-----)$') {
-                      $header = $Matches[1]; $body = $Matches[2]; $footer = $Matches[3]
-                      $bodyLines = for ($i = 0; $i -lt $body.Length; $i += 64) { $body.Substring($i, [Math]::Min(64, $body.Length - $i)) }
-                      $privateKey = "$header`n$($bodyLines -join "`n")`n$footer"
-                    }
-                  }
-                  $tempKeyFile = Join-Path $env:RUNNER_TEMP "gh-app-key-$([Guid]::NewGuid()).pem"
-                  [System.IO.File]::WriteAllText($tempKeyFile, $privateKey, [System.Text.UTF8Encoding]::new($false))
-                  try {
-                    $now = [Math]::Floor([decimal](Get-Date -UFormat %s))
-                    $headerEncoded  = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes('{"alg":"RS256","typ":"JWT"}')).TrimEnd('=').Replace('+','-').Replace('/','_')
-                    $payloadEncoded = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("{`"iat`":$($now-60),`"exp`":$($now+600),`"iss`":`"$clientId`"}")).TrimEnd('=').Replace('+','-').Replace('/','_')
-                    $dataFile = Join-Path $env:RUNNER_TEMP "data-$([Guid]::NewGuid()).txt"
-                    $sigFile  = Join-Path $env:RUNNER_TEMP "sig-$([Guid]::NewGuid()).bin"
-                    "$headerEncoded.$payloadEncoded" | Out-File $dataFile -Encoding ASCII -NoNewline
-                    & openssl dgst -sha256 -sign $tempKeyFile -out $sigFile $dataFile 2>&1 | Out-Null
-                    $sigEncoded = [Convert]::ToBase64String([System.IO.File]::ReadAllBytes($sigFile)).TrimEnd('=').Replace('+','-').Replace('/','_')
-                    $jwt = "$headerEncoded.$payloadEncoded.$sigEncoded"
-                    Remove-Item $dataFile, $sigFile -Force -ErrorAction SilentlyContinue
-                    $headers = @{ "Accept"="application/vnd.github+json"; "Authorization"="Bearer $jwt"; "X-GitHub-Api-Version"="2022-11-28" }
-                    $owner = "${{ github.repository_owner }}"
-                    try { $installation = Invoke-RestMethod -Uri "https://api.github.com/orgs/$owner/installation" -Headers $headers -Method Get }
-                    catch { $installation = Invoke-RestMethod -Uri "https://api.github.com/users/$owner/installation" -Headers $headers -Method Get }
-                    $token = (Invoke-RestMethod -Uri $installation.access_tokens_url -Headers $headers -Method Post).token
-                    Add-Content -Encoding UTF8 -Path $env:GITHUB_OUTPUT -Value "token=$token"
-                    Write-Host "[OK] GitHub App token generated"
-                  }
-                  finally { Remove-Item $tempKeyFile -Force -ErrorAction SilentlyContinue }
+  RemoveCronAfterExecution:
+    name: Remove cron after scheduled execution
+    needs: [TriggerPublish]
+    # if: github.event_name == 'schedule'
+    runs-on: [ubuntu-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Generate GitHub App token
+        id: GenerateJWT
+        shell: pwsh
+        env:
+          GH_TOKEN_WORKFLOW: ${{ secrets.GHTOKENWORKFLOW }}
+        run: |
+          $errorActionPreference = "Stop"; $ProgressPreference = "SilentlyContinue"; Set-StrictMode -Version 2.0
+          if (-not $env:GH_TOKEN_WORKFLOW) {
+            Write-Host "::error::Secret GHTOKENWORKFLOW is not configured"
+            exit 1
+          }
+          $tokenData = $env:GH_TOKEN_WORKFLOW | ConvertFrom-Json
+          $clientId = $tokenData.GitHubAppClientId
+          $privateKey = $tokenData.PrivateKey -replace '\\n', "`n"
+          if ($privateKey -notmatch "`n") {
+            if ($privateKey -match '^(-----BEGIN [^-]+-----)(.+?)(-----END [^-]+-----)$') {
+              $header = $Matches[1]; $body = $Matches[2]; $footer = $Matches[3]
+              $bodyLines = for ($i = 0; $i -lt $body.Length; $i += 64) { $body.Substring($i, [Math]::Min(64, $body.Length - $i)) }
+              $privateKey = "$header`n$($bodyLines -join "`n")`n$footer"
+            }
+          }
+          $tempKeyFile = Join-Path $env:RUNNER_TEMP "gh-app-key-$([Guid]::NewGuid()).pem"
+          [System.IO.File]::WriteAllText($tempKeyFile, $privateKey, [System.Text.UTF8Encoding]::new($false))
+          try {
+            $now = [Math]::Floor([decimal](Get-Date -UFormat %s))
+            $headerEncoded  = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes('{"alg":"RS256","typ":"JWT"}')).TrimEnd('=').Replace('+','-').Replace('/','_')
+            $payloadEncoded = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("{`"iat`":$($now-60),`"exp`":$($now+600),`"iss`":`"$clientId`"}")).TrimEnd('=').Replace('+','-').Replace('/','_')
+            $dataFile = Join-Path $env:RUNNER_TEMP "data-$([Guid]::NewGuid()).txt"
+            $sigFile  = Join-Path $env:RUNNER_TEMP "sig-$([Guid]::NewGuid()).bin"
+            "$headerEncoded.$payloadEncoded" | Out-File $dataFile -Encoding ASCII -NoNewline
+            & openssl dgst -sha256 -sign $tempKeyFile -out $sigFile $dataFile 2>&1 | Out-Null
+            $sigEncoded = [Convert]::ToBase64String([System.IO.File]::ReadAllBytes($sigFile)).TrimEnd('=').Replace('+','-').Replace('/','_')
+            $jwt = "$headerEncoded.$payloadEncoded.$sigEncoded"
+            Remove-Item $dataFile, $sigFile -Force -ErrorAction SilentlyContinue
+            $headers = @{ "Accept"="application/vnd.github+json"; "Authorization"="Bearer $jwt"; "X-GitHub-Api-Version"="2022-11-28" }
+            $owner = "${{ github.repository_owner }}"
+            try { $installation = Invoke-RestMethod -Uri "https://api.github.com/orgs/$owner/installation" -Headers $headers -Method Get }
+            catch { $installation = Invoke-RestMethod -Uri "https://api.github.com/users/$owner/installation" -Headers $headers -Method Get }
+            $token = (Invoke-RestMethod -Uri $installation.access_tokens_url -Headers $headers -Method Post).token
+            Add-Content -Encoding UTF8 -Path $env:GITHUB_OUTPUT -Value "token=$token"
+            Write-Host "[OK] GitHub App token generated"
+          }
+          finally { Remove-Item $tempKeyFile -Force -ErrorAction SilentlyContinue }
 
-            - name: Checkout
-              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-              with:
-                  token: ${{ steps.GenerateJWT.outputs.token }}
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          token: ${{ steps.GenerateJWT.outputs.token }}
 
-            - name: Remove cron and push
-              run: |
-                  git config user.name "github-actions[bot]"
-                  git config user.email "github-actions[bot]@users.noreply.github.com"
-                  git pull --rebase origin ${{ github.ref_name }}
-                  python3 << 'PYEOF'
-                  import re
-                  filepath = '.github/workflows/LDR_PublicarEnProduccionRetardado.yaml'
-                  with open(filepath) as f:
-                      lines = f.readlines()
-                  in_on_block = False
-                  schedule_indent = None
-                  remove_indices = []
-                  for i, line in enumerate(lines):
-                      stripped = line.lstrip()
-                      indent = len(line) - len(stripped)
-                      if re.match(r'^on:\s*$', line):
-                          in_on_block = True
-                          continue
-                      if in_on_block:
-                          if stripped and indent == 0:
-                              in_on_block = False
-                              continue
-                          if re.match(r'\s+schedule:\s*$', line):
-                              schedule_indent = indent
-                              remove_indices.append(i)
-                          elif schedule_indent is not None:
-                              if stripped and indent <= schedule_indent:
-                                  schedule_indent = None
-                              else:
-                                  remove_indices.append(i)
-                  if remove_indices:
-                      lines = [l for i, l in enumerate(lines) if i not in remove_indices]
-                      print(f'Sección schedule eliminada ({len(remove_indices)} líneas).')
-                  else:
-                      print('No se encontró sección schedule bajo on:, nada que eliminar.')
-                  with open(filepath, 'w') as f:
-                      f.writelines(lines)
-                  PYEOF
-                  echo "Cron eliminado."
+      - name: Remove cron and push
+        env:
+          GH_APP_TOKEN: ${{ steps.GenerateJWT.outputs.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${GH_APP_TOKEN}@github.com/${{ github.repository }}.git"
+          git pull --rebase origin ${{ github.ref_name }}
+          python3 << 'PYEOF'
+          import re
+          filepath = '.github/workflows/LDR_PublicarEnProduccionRetardado.yaml'
+          with open(filepath) as f:
+              lines = f.readlines()
+          in_on_block = False
+          schedule_indent = None
+          remove_indices = []
+          for i, line in enumerate(lines):
+              stripped = line.lstrip()
+              indent = len(line) - len(stripped)
+              if re.match(r'^on:\s*$', line):
+                  in_on_block = True
+                  continue
+              if in_on_block:
+                  if stripped and indent == 0:
+                      in_on_block = False
+                      continue
+                  if re.match(r'\s+schedule:\s*$', line):
+                      schedule_indent = indent
+                      remove_indices.append(i)
+                  elif schedule_indent is not None:
+                      if stripped and indent <= schedule_indent:
+                          schedule_indent = None
+                      else:
+                          remove_indices.append(i)
+          if remove_indices:
+              lines = [l for i, l in enumerate(lines) if i not in remove_indices]
+              print(f'Sección schedule eliminada ({len(remove_indices)} líneas).')
+          else:
+              print('No se encontró sección schedule bajo on:, nada que eliminar.')
+          with open(filepath, 'w') as f:
+              f.writelines(lines)
+          PYEOF
+          echo "Cron eliminado."
 
-                  git add .github/workflows/LDR_PublicarEnProduccionRetardado.yaml
-                  if git diff --cached --quiet; then
-                    echo "Sin cambios, nada que commitear"
-                  else
-                    git commit -m "chore: eliminar cron de LDR_PublicarEnProduccionRetardado tras ejecución programada"
-                    git push
-                  fi
+          git add .github/workflows/LDR_PublicarEnProduccionRetardado.yaml
+          if git diff --cached --quiet; then
+            echo "Sin cambios, nada que commitear"
+          else
+            git commit -m "chore: eliminar cron de LDR_PublicarEnProduccionRetardado tras ejecución programada"
+            git push
+          fi
