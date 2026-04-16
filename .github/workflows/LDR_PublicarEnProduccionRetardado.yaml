@@ -200,6 +200,7 @@ jobs:
           merge-method: squash
 
   Auto-aprobacion:
+    name: Auto-aprobar y mergear Pull Request de eliminación de cron
     runs-on: ubuntu-latest
     needs: [RemoveCronAfterExecution]
     if: needs.RemoveCronAfterExecution.outputs.pr_number != ''
