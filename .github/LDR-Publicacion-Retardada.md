@@ -25,8 +25,8 @@ LDR_ProgramarPublicacion.yaml
         ├── Calcula cron con la fecha actual y la hora configurada
         ├── Modifica el cron en LDR_PublicarEnProduccionRetardado.yaml
         ├── Crea un Pull Request con el cambio (rama: ldr/update-schedule)
-        ├── Habilita auto-merge en el PR
-        └── Job Auto-aprobacion: aprueba el PR con GHTOKEN_AUTO
+        ├── Habilita auto-merge en el PR (si el repositorio tiene checks requeridos)
+        └── Job Auto-aprobacion: aprueba el PR con GHTOKEN_AUTO y lo fusiona directamente
 
 LDR_PublicarEnProduccionRetardado.yaml  (activado por el cron escrito)
   ├── Job: TriggerPublish
@@ -36,8 +36,8 @@ LDR_PublicarEnProduccionRetardado.yaml  (activado por el cron escrito)
   └── Job: RemoveCronAfterExecution
         ├── Elimina la sección schedule del propio workflow
         ├── Crea un Pull Request con el cambio (rama: ldr/remove-cron)
-        ├── Habilita auto-merge en el PR
-        └── Job Auto-aprobacion: aprueba el PR con GHTOKEN_AUTO
+        ├── Habilita auto-merge en el PR (si el repositorio tiene checks requeridos)
+        └── Job Auto-aprobacion: aprueba el PR con GHTOKEN_AUTO y lo fusiona directamente
 ```
 
 ---
@@ -121,7 +121,7 @@ Lee el campo `PublicarOnRelease` de `LDR-Settings.json` y lo expone como output 
 #### 5. Create Pull Request
 > Este paso solo se ejecuta si `PublicarOnRelease` es `true`.
 
-Crea un Pull Request en la rama `ldr/update-schedule` con el archivo `LDR_PublicarEnProduccionRetardado.yaml` modificado. A continuación habilita el **auto-merge** en el PR (squash). El job `Auto-aprobacion` aprueba el PR usando el secreto `GHTOKEN_AUTO`, tras lo cual el auto-merge lo fusiona automáticamente en cuanto se cumplan los requisitos de la rama protegida.
+Crea un Pull Request en la rama `ldr/update-schedule` con el archivo `LDR_PublicarEnProduccionRetardado.yaml` modificado. A continuación intenta habilitar el **auto-merge** en el PR (squash), aunque este paso es opcional y no interrumpe el flujo si el repositorio no tiene checks requeridos configurados. El job `Auto-aprobacion` aprueba el PR usando el secreto `GHTOKEN_AUTO` y a continuación lo fusiona directamente con `gh pr merge --squash`, garantizando el merge independientemente de si el auto-merge estaba disponible.
 
 ---
 
@@ -138,7 +138,7 @@ Crea un Pull Request en la rama `ldr/update-schedule` con el archivo `LDR_Public
 
 ### Job `RemoveCronAfterExecution`
 
-Se ejecuta siempre que `TriggerPublish` termine (con éxito o fallo). Genera un token de App, hace checkout y ejecuta un script Python que elimina toda la sección `schedule:` del bloque `on:` del propio archivo `LDR_PublicarEnProduccionRetardado.yaml`, dejándolo solo con `workflow_dispatch`. A continuación crea un Pull Request en la rama `ldr/remove-cron`, habilita auto-merge y el job `Auto-aprobacion` lo aprueba con `GHTOKEN_AUTO`.
+Se ejecuta siempre que `TriggerPublish` termine (con éxito o fallo). Genera un token de App, hace checkout y ejecuta un script Python que elimina toda la sección `schedule:` del bloque `on:` del propio archivo `LDR_PublicarEnProduccionRetardado.yaml`, dejándolo solo con `workflow_dispatch`. A continuación crea un Pull Request en la rama `ldr/remove-cron`, intenta habilitar auto-merge (paso opcional con `continue-on-error`) y el job `Auto-aprobacion` aprueba el PR con `GHTOKEN_AUTO` y lo fusiona directamente con `gh pr merge --squash`.
 
 Esto garantiza que el workflow **no se repita** en fechas futuras con el mismo cron, ya que GitHub Actions ejecutaría de nuevo un cron `45 23 14 4 *` cualquier 14 de abril de años sucesivos.
 
@@ -175,12 +175,12 @@ Requisitos del token:
 
 ### Configuración del repositorio: Allow auto-merge
 
-Para que el auto-merge funcione, debe estar habilitada la opción **Allow auto-merge** en la configuración del repositorio:
+Para que el paso `Habilitar Pull Request Automerge` funcione (opción adicional cuando hay checks requeridos), debe estar habilitada la opción **Allow auto-merge** en la configuración del repositorio:
 
 1. Ir a **Settings** → **General**.
 2. En la sección **Pull Requests**, marcar **Allow auto-merge**.
 
-Sin esta opción habilitada, `peter-evans/enable-pull-request-automerge` no podrá activar el auto-merge en los PRs y la fusión automática no se producirá.
+Esta opción es **opcional**: los workflows LDR siempre realizan el merge directamente con `gh pr merge --squash` en el job `Auto-aprobacion`, por lo que el flujo funciona aunque la rama no tenga checks requeridos ni auto-merge habilitado.
 
 ### Workflow `PublishToEnvironment.yaml`
 
