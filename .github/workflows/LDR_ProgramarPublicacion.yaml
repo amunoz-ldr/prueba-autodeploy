@@ -136,7 +136,14 @@ jobs:
                   else:
                       for i, line in enumerate(lines):
                           if re.match(r'^on:\s*$', line):
-                              lines.insert(i + 1, f"    schedule:\n        - cron: '{new_cron}'\n")
+                              # Detect indentation of existing keys under on:
+                              ind = '  '
+                              for j in range(i + 1, len(lines)):
+                                  s = lines[j].lstrip()
+                                  if s and not s.startswith('#'):
+                                      ind = ' ' * (len(lines[j]) - len(s))
+                                      break
+                              lines.insert(i + 1, f"{ind}schedule:\n{ind}    - cron: '{new_cron}'\n")
                               print(f'Sección schedule y cron creados: {new_cron}')
                               break
                   with open(filepath, 'w') as f:
