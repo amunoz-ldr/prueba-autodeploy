@@ -345,3 +345,22 @@ jobs:
     with:
       releaseVersion: ${{ needs.CreateRelease.outputs.releaseVersion }}
     secrets: inherit
+
+   CustomJob-DetectPR:
+    name: Detectar PR de incremento de version
+    needs: [ UpdateVersionNumber ]
+    if: needs.UpdateVersionNumber.result == 'success'
+    uses: ./.github/workflows/LDR_DetectPRIncrementVersion.yaml
+    with:
+      baseRef: ${{ github.ref_name }}
+    secrets: inherit
+
+  CustomJob-Autoaprobar:
+    name: Auto-aprobar PR de incremento de version
+    needs: [ CustomJob-DetectPR ]
+    if: needs['CustomJob-DetectPR'].result == 'success' &&
+      needs['CustomJob-DetectPR'].outputs.pr_number != ''
+    uses: ./.github/workflows/LDR_AutoaprobarPR.yaml
+    with:
+      prNumber: ${{ needs['CustomJob-DetectPR'].outputs.pr_number }}
+    secrets: inherit
