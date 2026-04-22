@@ -17,10 +17,6 @@ on:
                 description: Numero de PR encontrada para incremento de version
                 value: ${{ jobs.DetectPR.outputs.pr_number }}
 
-permissions:
-    contents: read
-    pull-requests: read
-
 defaults:
     run:
         shell: bash
