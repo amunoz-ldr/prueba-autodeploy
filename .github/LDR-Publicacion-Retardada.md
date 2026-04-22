@@ -6,6 +6,7 @@ Todo el proceso se desencadena ejecutando el workflow **Create release** desde G
 
 1. Al finalizar el release, calcula la hora de publicación configurada y la fija como un cron schedule en el workflow `LDR_PublicarEnProduccionRetardado.yaml`.
 2. A la hora programada, ese workflow se activa, lanza el deploy al entorno de producción y elimina el cron de sí mismo, dejando el workflow limpio hasta el siguiente release.
+3. Si el incremento de versión en rama principal se realiza por PR (`Direct Commit?` desmarcado), ese PR se detecta, se autoaprueba y se mergea automáticamente.
 
 En repositorios con protección de rama, los cambios sobre los workflows se realizan a través de **Pull Requests** que se aprueban y fusionan automáticamente.
 
@@ -17,6 +18,13 @@ En repositorios con protección de rama, los cambios sobre los workflows se real
 CreateRelease.yaml
   └── Job: CustomJob-UpdatePublishSchedule
         └── Invoca LDR_ProgramarPublicacion.yaml (workflow_call)
+
+CreateRelease.yaml
+  ├── Job: UpdateVersionNumber
+  ├── Job: CustomJob-DetectPR
+  │     └── Invoca LDR_DetectPRIncrementVersion.yaml (workflow_call)
+  └── Job: CustomJob-Autoaprobar
+        └── Invoca LDR_AutoaprobarPR.yaml (workflow_call)
 
 LDR_ProgramarPublicacion.yaml
   └── Job: UpdatePublishSchedule
@@ -48,6 +56,8 @@ LDR_PublicarEnProduccionRetardado.yaml  (activado por el cron escrito)
 |---|---|
 | `.github/LDR-Settings.json` | Configuración del mecanismo (ver sección siguiente) |
 | `.github/workflows/CreateRelease.yaml` | Contiene el job `CustomJob-UpdatePublishSchedule` que invoca `LDR_ProgramarPublicacion.yaml` |
+| `.github/workflows/LDR_DetectPRIncrementVersion.yaml` | Localiza el PR creado por `UpdateVersionNumber` para usar su número en la autoaprobación |
+| `.github/workflows/LDR_AutoaprobarPR.yaml` | Aprueba y fusiona automáticamente PRs (incluido el PR de incremento de versión) |
 | `.github/workflows/LDR_ProgramarPublicacion.yaml` | Contiene toda la lógica de programación del cron; se puede invocar también manualmente |
 | `.github/workflows/LDR_PublicarEnProduccionRetardado.yaml` | Workflow que ejecuta el deploy y se auto-limpia |
 
@@ -88,6 +98,17 @@ secrets: inherit
 ```
 
 Gracias a `secrets: inherit`, el secreto `GHTOKENWORKFLOW` se transmite automáticamente al workflow llamado.
+
+## Jobs de PR de incremento de versión en `CreateRelease.yaml`
+
+Cuando en el input **Direct Commit?** se selecciona **desmarcado**, `UpdateVersionNumber` crea un Pull Request para aplicar el incremento de versión en la rama principal.
+
+Después de `UpdateVersionNumber`, `CreateRelease.yaml` ejecuta:
+
+1. `CustomJob-DetectPR`: invoca `LDR_DetectPRIncrementVersion.yaml` para localizar el PR abierto de incremento de versión.
+2. `CustomJob-Autoaprobar`: si existe PR, invoca `LDR_AutoaprobarPR.yaml` para aprobarlo usando `GHTOKEN_AUTO` y fusionarlo con `gh pr merge --squash`.
+
+Resultado: el incremento de versión por PR queda completamente automatizado (detección, aprobación y merge).
 
 ---
 
@@ -246,7 +267,7 @@ El proceso completo se inicia ejecutando el workflow **Create release** desde la
 | Prefix for release branch | `release/` | Solo relevante si se marca la opción anterior |
 | New Version Number in main branch | `+0.1` | Incrementa el número de minor en la rama main tras el release; usar `+1` para salto de major |
 | Skip updating dependency version numbers | _(desmarcado)_ | Marcar solo si se gestionan dependencias manualmente |
-| Direct Commit? | _(desmarcado)_ | Si se desmarca, el incremento de versión se hace mediante PR |
+| Direct Commit? | _(desmarcado)_ | Si se desmarca, el incremento de versión se hace mediante PR y el flujo lo autoaprueba y mergea automáticamente |
 | Use GhTokenWorkflow for PR/Commit? | _(marcado)_ | Necesario para que los commits de sistema desencadenen otros workflows |
 
 > **Nota:** Al completarse el release con éxito, el job `CustomJob-UpdatePublishSchedule` invoca automáticamente `LDR_ProgramarPublicacion.yaml`, que programa la publicación en producción a la hora configurada en `LDR-Settings.json`.
@@ -284,4 +305,19 @@ Job: RemoveCronAfterExecution
       │  crea PR eliminando schedule → auto-aprobado → auto-merged
       ▼
    (workflow queda limpio, sin cron)
+
+[en paralelo]
+CreateRelease workflow
+  │
+  ▼
+UpdateVersionNumber
+  │  (si Direct Commit? desmarcado, crea PR de incremento de versión)
+  ▼
+CustomJob-DetectPR  (workflow_call)
+  │
+  ▼
+CustomJob-Autoaprobar  (workflow_call)
+  │  aprueba PR + merge --squash
+  ▼
+   main actualizada con nueva versión
 ```
