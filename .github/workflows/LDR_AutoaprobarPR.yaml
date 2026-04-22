@@ -39,24 +39,31 @@ jobs:
                     review_decision=$(echo "$pr_info" | jq -r '.reviewDecision')
                     is_draft=$(echo "$pr_info" | jq -r '.isDraft')
 
+                    echo "Intento $attempt: state=$state mergeStateStatus=$merge_state reviewDecision=$review_decision isDraft=$is_draft"
+
                     if [ "$state" = "MERGED" ] || [ "$state" = "CLOSED" ]; then
+                      echo "PR ya cerrada o mergeada, no se requiere accion."
                       exit 0
                     fi
 
                     if [ "$is_draft" = "true" ]; then
+                      echo "PR en draft, no se intenta merge automatico."
                       exit 0
                     fi
 
-                    if [ "$merge_state" = "CLEAN" ] && [ "$review_decision" = "APPROVED" ]; then
-                      gh pr merge "$pr_number" \
-                        --squash \
-                        -R ${{ github.repository }}
+                    if gh pr merge "$pr_number" \
+                      --squash \
+                      -R ${{ github.repository }}; then
+                      echo "Merge ejecutado correctamente."
                       exit 0
                     fi
+
+                    echo "Merge no disponible todavia, se reintentara."
 
                     if [ "$attempt" -lt 6 ]; then
                       sleep 10
                     fi
                   done
 
+                  echo "No se pudo mergear dentro de la ventana de reintentos."
                   exit 0

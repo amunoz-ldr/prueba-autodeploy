@@ -61,4 +61,10 @@ jobs:
                     | .[0].number // empty
                   ')
 
+                  if [ -n "$pr_number" ]; then
+                    echo "PR detectada: #$pr_number"
+                  else
+                    echo "No se encontro ninguna PR candidata para autoaprobacion."
+                  fi
+
                   echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
