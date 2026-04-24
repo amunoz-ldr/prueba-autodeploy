@@ -1,9 +1,9 @@
-name: "LDR: Publicar en producción (retardado)"
+name: "LDR Publicar Retardado"
 
 on:
-  schedule:
-      - cron: '45 23 24 4 *'
   workflow_dispatch:
+  schedule:
+    - cron: '0 0 10 * *'
 
 permissions:
   actions: write
