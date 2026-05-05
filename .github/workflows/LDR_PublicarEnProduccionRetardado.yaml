@@ -1,4 +1,4 @@
-name: "LDR: Publicar en producción (retardado)"
+name: "LDR Publicar Retardado"
 
 on:
   workflow_dispatch:
